@@ -1,0 +1,9 @@
+pandas
+pandas_ta
+matplotlib
+aiohttp
+asyncio
+scikit-learn
+install xgboost
+install lightgbm
+install catboost
