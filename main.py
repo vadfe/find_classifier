@@ -13,7 +13,7 @@ def test():
     #print(data)
     #X_train_scaled, y_train, X_val_scaled, y_val, X_test_scaled, y_test = split_scale_data(data)
     start_r(data)
-    #print(df)
+
 
 if __name__ == "__main__":
     test()
