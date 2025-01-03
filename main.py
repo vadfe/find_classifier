@@ -14,7 +14,8 @@ def test():
     #X_train_scaled, y_train, X_val_scaled, y_val, X_test_scaled, y_test = split_scale_data(data)
     #start_r(data)
     #eval_2(data)
-    eval_3(data)
+    #eval_3(data)
+    eval_futures(data)
 
 
 if __name__ == "__main__":

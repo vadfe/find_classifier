@@ -8,11 +8,6 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn.ensemble import ExtraTreesClassifier
-from sklearn.ensemble import BaggingClassifier
-
-from xgboost import XGBClassifier
-from lightgbm import LGBMClassifier
-from catboost import CatBoostClassifier
 from sklearn.feature_selection import RFE
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix
@@ -31,6 +26,8 @@ from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis, LinearDiscriminantAnalysis
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
+import time
+from joblib import Parallel, delayed
 
 def split_scale_data(df):
     _res = df.copy()
@@ -79,21 +76,66 @@ def split_scale_data(df):
     print("Class distribution in test set:\n", y_test.value_counts())
     return X_train_scaled, y_train, X_val_scaled, y_val, X_test_scaled, y_test, feature_names
 
-def eval_3(_df):
+
+def train_classifier(clf, X_train, y_train, X_val, y_val, X_test, y_test):
+    print(f"\n{type(clf).__name__}: fit start")
+    start_time = time.time()
+    clf.fit(X_train, y_train)
+    training_time = time.time() - start_time
+    print(f"\n{type(clf).__name__}: fit end. training_time: {training_time}")
+
+    y_pred_val = clf.predict(X_val)
+    report_val = classification_report(y_val, y_pred_val, output_dict=True)
+
+    y_pred_test = clf.predict(X_test)
+    report_test = classification_report(y_test, y_pred_test, output_dict=True)
+
+    newrow = {
+        'Classifier': type(clf).__name__,
+        'Training Time (s)': training_time,
+        'Val Precision': report_val['weighted avg']['precision'],
+        'Val Recall': report_val['weighted avg']['recall'],
+        'Val F1-score': report_val['weighted avg']['f1-score'],
+        'Test Precision': report_test['weighted avg']['precision'],
+        'Test Recall': report_test['weighted avg']['recall'],
+        'Test F1-score': report_test['weighted avg']['f1-score'],
+    }
+    print(f"End train {newrow}")
+    return newrow
+
+
+def evaluate_classifier(model, X_train, y_train, X_val, y_val, X_test, y_test, feature_names):
+    selector = RFECV(model, step=1, cv=5)# Создание экземпляра RFECV
+    selector.fit(X_train, y_train) # Обучение модели
+    X_selected = selector.transform(X_train)# Получение выбранных признаков
+    X_val_selected = selector.transform(X_val)# Преобразование валидационного и тестового наборов данных
+    X_test_selected = selector.transform(X_test)
+    # Сохранение списка выбранных признаков
+    selected_features = [feature for feature, selected in zip(feature_names, selector.support_) if selected]
+    result = train_classifier(selector, X_selected, y_train, X_val_selected, y_val, X_test_selected, y_test)# Обучение классификатора на выбранных признаках
+    return {
+        'name': type(model).__name__,
+        'n_features': selector.n_features_,
+        'Classifier': result['Classifier'],
+        'Training Time (s)': result['Training Time (s)'],
+        'Val Precision': result['Val Precision'],
+        'Val Recall': result['Val Recall'],
+        'Val F1-score': result['Val F1-score'],
+        'Test Precision': result['Test Precision'],
+        'Test Recall': result['est Recall'],
+        'Test F1-score': result['Test F1-score'],
+        'Selected Features': selected_features
+    }
+
+
+def eval_futures(_df):
     X_train, y_train, X_val, y_val, X_test, y_test, feature_names = split_scale_data(_df)
-    logistic_regressor = LogisticRegression(max_iter=200, random_state=42)
-    decision_tree = DecisionTreeClassifier(random_state=42)
-    random_forest = RandomForestClassifier(random_state=42)
-    xgb_classifier = XGBClassifier(eval_metric='logloss', random_state=42)
-    gaussian_nb = GaussianNB()
-    hist_gradient_boosting_classifier = HistGradientBoostingClassifier(random_state=42)
-    mlp_classifier = MLPClassifier(max_iter=500, random_state=42),
+    # Список классификаторов для перебора
     classifiers = [
-        LogisticRegression(max_iter=200, random_state=42),
+        LogisticRegression(max_iter=500, random_state=42),
         Perceptron(max_iter=1000, random_state=42),
-        RidgeClassifier(),
         XGBClassifier(eval_metric='logloss', random_state=42),
-        CatBoostClassifier(iterations=1000, learning_rate=0.1, depth=6, verbose=0, random_state=42),
+        CatBoostClassifier(iterations=1000, learning_rate=0.1, depth=6, random_state=42, verbose=False),
         LGBMClassifier(random_state=42),
         HistGradientBoostingClassifier(random_state=42),
         DecisionTreeClassifier(random_state=42),
@@ -103,43 +145,73 @@ def eval_3(_df):
         MLPClassifier(max_iter=500, random_state=42),
         MultinomialNB(),
         RandomForestClassifier(random_state=42),
-        #SVC(probability=True, random_state=42), #очень долго
         LinearSVC(random_state=42),
         BaggingClassifier(random_state=42),
         AdaBoostClassifier(random_state=42),
         ExtraTreesClassifier(random_state=42),
         GradientBoostingClassifier(random_state=42),
-        GaussianProcessClassifier(),
-        QuadraticDiscriminantAnalysis(),
+
+        QuadraticDiscriminantAnalysis(reg_param=0.1),
         LinearDiscriminantAnalysis(),
-        VotingClassifier(estimators=[('logistic', logistic_regressor),
-                                     ('mlp', mlp_classifier),
-                                     ('hist_gb', hist_gradient_boosting_classifier),
-                                     ('gaussian_nb', gaussian_nb)], voting='hard'),
-        StackingClassifier(
-            estimators=[
-                ('logistic', logistic_regressor),
-                ('decision_tree', decision_tree),
-                ('random_forest', random_forest),
-                ('xgb', xgb_classifier),
-                ('gaussian_nb', gaussian_nb)
-            ],
-            final_estimator=LogisticRegression()  # Финальный классификатор
-        )
+        VotingClassifier(estimators=[('logistic', LogisticRegression(max_iter=500, random_state=42)),
+                                     ('mlp', MLPClassifier(max_iter=500, random_state=42)),
+                                     ('hist_gb', HistGradientBoostingClassifier(random_state=42)),
+                                     ('gaussian_nb', GaussianNB())], voting='hard')
     ]
 
-    for clf in classifiers:
+    # Параллельное выполнение
+    results = Parallel(n_jobs=-1)(
+        delayed(evaluate_classifier)(clf, X_train, y_train, X_val, y_val, X_test, y_test, feature_names) for clf in classifiers)
 
-        print('')
-        print(f"{type(clf).__name__}: fit")
-        clf.fit(X_train, y_train)
+    results_df = pd.DataFrame(results)
+    results_df.to_csv('classification_results.csv', index=False)
+    print(f"Results saved to {'classification_results.csv'}")
 
-        y_pred = clf.predict(X_val)
-        print("Classification Report:\n", classification_report(y_val, y_pred))
-        print("Confusion Matrix:\n", confusion_matrix(y_val, y_pred))
-        y_pred = clf.predict(X_test)
-        print("Classification Report:\n", classification_report(y_test, y_pred))
-        print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred))
+    return results_df  # Возвращаем DataFrame с результатами
+
+def eval_3(_df):
+    X_train, y_train, X_val, y_val, X_test, y_test, feature_names = split_scale_data(_df)
+
+    classifiers = [
+        LogisticRegression(max_iter=500, random_state=42),
+        Perceptron(max_iter=1000, random_state=42),
+        XGBClassifier(eval_metric='logloss', random_state=42),
+        CatBoostClassifier(iterations=1000, learning_rate=0.1, depth=6, random_state=42, verbose=False),
+        LGBMClassifier(random_state=42),
+        HistGradientBoostingClassifier(random_state=42),
+        DecisionTreeClassifier(random_state=42),
+        GaussianNB(),
+        BernoulliNB(),
+        KNeighborsClassifier(n_neighbors=5),
+        MLPClassifier(max_iter=500, random_state=42),
+        MultinomialNB(),
+        RandomForestClassifier(random_state=42),
+        LinearSVC(random_state=42),
+        BaggingClassifier(random_state=42),
+        AdaBoostClassifier(random_state=42),
+        ExtraTreesClassifier(random_state=42),
+        GradientBoostingClassifier(random_state=42),
+
+        QuadraticDiscriminantAnalysis(reg_param=0.1),
+        LinearDiscriminantAnalysis(),
+        VotingClassifier(estimators=[('logistic', LogisticRegression(max_iter=500, random_state=42)),
+                                     ('mlp', MLPClassifier(max_iter=500, random_state=42)),
+                                     ('hist_gb', HistGradientBoostingClassifier(random_state=42)),
+                                     ('gaussian_nb', GaussianNB())], voting='hard')
+    ]
+    results = []
+    # Используем Parallel для распараллеливания обучения
+    results = Parallel(n_jobs=-1)(
+        delayed(train_classifier)(clf, X_train, y_train, X_val, y_val, X_test, y_test) for clf in classifiers)
+
+    # Создаем DataFrame из результатов
+    results_df = pd.DataFrame(results)
+    print("\nResults:")
+    print(results_df)
+    # Сохраняем результаты в CSV файл
+    results_df.to_csv('classification_results.csv', index=False)
+
+    return results_df  # Возвращаем DataFrame с результатами
 
 def eval_2(_df):
     X_train, y_train, X_val, y_val, X_test, y_test, feature_names = split_scale_data(_df)
