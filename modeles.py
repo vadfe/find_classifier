@@ -127,6 +127,35 @@ def evaluate_classifier(model, X_train, y_train, X_val, y_val, X_test, y_test, f
         'Selected Features': selected_features
     }
 
+def get_clf_array():
+    classifiers = [
+        LogisticRegression(max_iter=500, random_state=42),
+        Perceptron(max_iter=1000, random_state=42),
+        XGBClassifier(eval_metric='logloss', random_state=42),
+        CatBoostClassifier(iterations=1000, learning_rate=0.1, depth=6, random_state=42, verbose=False),
+        LGBMClassifier(random_state=42),
+        HistGradientBoostingClassifier(random_state=42),
+        DecisionTreeClassifier(random_state=42),
+        GaussianNB(),
+        BernoulliNB(),
+        KNeighborsClassifier(n_neighbors=5),
+        MLPClassifier(max_iter=500, random_state=42),
+        MultinomialNB(),
+        RandomForestClassifier(random_state=42),
+        LinearSVC(random_state=42),
+        BaggingClassifier(random_state=42),
+        AdaBoostClassifier(random_state=42),
+        ExtraTreesClassifier(random_state=42),
+        GradientBoostingClassifier(random_state=42),
+
+        QuadraticDiscriminantAnalysis(reg_param=0.1),
+        LinearDiscriminantAnalysis(),
+        VotingClassifier(estimators=[('logistic', LogisticRegression(max_iter=500, random_state=42)),
+                                     ('mlp', MLPClassifier(max_iter=500, random_state=42)),
+                                     ('hist_gb', HistGradientBoostingClassifier(random_state=42)),
+                                     ('gaussian_nb', GaussianNB())], voting='hard')
+    ]
+    return classifiers
 
 def eval_futures(_df):
     X_train, y_train, X_val, y_val, X_test, y_test, feature_names = split_scale_data(_df)
