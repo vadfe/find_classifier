@@ -12,7 +12,9 @@ def test():
     data = md.take_data(df)
     #print(data)
     #X_train_scaled, y_train, X_val_scaled, y_val, X_test_scaled, y_test = split_scale_data(data)
-    start_r(data)
+    #start_r(data)
+    #eval_2(data)
+    eval_3(data)
 
 
 if __name__ == "__main__":

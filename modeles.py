@@ -16,7 +16,21 @@ from catboost import CatBoostClassifier
 from sklearn.feature_selection import RFE
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.feature_selection import RFECV
 import pandas as pd
+
+from catboost import CatBoostClassifier
+from sklearn.linear_model import LogisticRegression,Perceptron,RidgeClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassifier, VotingClassifier, BaggingClassifier, StackingClassifier
+from sklearn.svm import SVC,LinearSVC,NuSVC
+from sklearn.naive_bayes import GaussianNB, MultinomialNB, BernoulliNB
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neural_network import MLPClassifier
+from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis, LinearDiscriminantAnalysis
+from xgboost import XGBClassifier
+from lightgbm import LGBMClassifier
 
 def split_scale_data(df):
     _res = df.copy()
@@ -24,7 +38,7 @@ def split_scale_data(df):
                     'p_high', 'p_30m_high', 'p_1h_high', 'p_low', 'p_30m_low', 'p_1h_low',
                     'close', 'open', 'high', 'low', 'volume', 'ma_prs', 'ma_vol', 'target']
     #Удаление    коррелирующих    признаков
-    threshold = 0.9  # Порог корреляции
+    threshold = 1.9  # Порог корреляции
     corr_matrix = df.corr().abs()
     # Получаем индексы признаков, которые нужно удалить
     #to_drop = set()
@@ -64,6 +78,115 @@ def split_scale_data(df):
     print("Class distribution in validation set:\n", y_val.value_counts())
     print("Class distribution in test set:\n", y_test.value_counts())
     return X_train_scaled, y_train, X_val_scaled, y_val, X_test_scaled, y_test, feature_names
+
+def eval_3(_df):
+    X_train, y_train, X_val, y_val, X_test, y_test, feature_names = split_scale_data(_df)
+    logistic_regressor = LogisticRegression(max_iter=200, random_state=42)
+    decision_tree = DecisionTreeClassifier(random_state=42)
+    random_forest = RandomForestClassifier(random_state=42)
+    xgb_classifier = XGBClassifier(eval_metric='logloss', random_state=42)
+    gaussian_nb = GaussianNB()
+    hist_gradient_boosting_classifier = HistGradientBoostingClassifier(random_state=42)
+    mlp_classifier = MLPClassifier(max_iter=500, random_state=42),
+    classifiers = [
+        LogisticRegression(max_iter=200, random_state=42),
+        Perceptron(max_iter=1000, random_state=42),
+        RidgeClassifier(),
+        XGBClassifier(eval_metric='logloss', random_state=42),
+        CatBoostClassifier(iterations=1000, learning_rate=0.1, depth=6, verbose=0, random_state=42),
+        LGBMClassifier(random_state=42),
+        HistGradientBoostingClassifier(random_state=42),
+        DecisionTreeClassifier(random_state=42),
+        GaussianNB(),
+        BernoulliNB(),
+        KNeighborsClassifier(n_neighbors=5),
+        MLPClassifier(max_iter=500, random_state=42),
+        MultinomialNB(),
+        RandomForestClassifier(random_state=42),
+        #SVC(probability=True, random_state=42), #очень долго
+        LinearSVC(random_state=42),
+        BaggingClassifier(random_state=42),
+        AdaBoostClassifier(random_state=42),
+        ExtraTreesClassifier(random_state=42),
+        GradientBoostingClassifier(random_state=42),
+        GaussianProcessClassifier(),
+        QuadraticDiscriminantAnalysis(),
+        LinearDiscriminantAnalysis(),
+        VotingClassifier(estimators=[('logistic', logistic_regressor),
+                                     ('mlp', mlp_classifier),
+                                     ('hist_gb', hist_gradient_boosting_classifier),
+                                     ('gaussian_nb', gaussian_nb)], voting='hard'),
+        StackingClassifier(
+            estimators=[
+                ('logistic', logistic_regressor),
+                ('decision_tree', decision_tree),
+                ('random_forest', random_forest),
+                ('xgb', xgb_classifier),
+                ('gaussian_nb', gaussian_nb)
+            ],
+            final_estimator=LogisticRegression()  # Финальный классификатор
+        )
+    ]
+
+    for clf in classifiers:
+
+        print('')
+        print(f"{type(clf).__name__}: fit")
+        clf.fit(X_train, y_train)
+
+        y_pred = clf.predict(X_val)
+        print("Classification Report:\n", classification_report(y_val, y_pred))
+        print("Confusion Matrix:\n", confusion_matrix(y_val, y_pred))
+        y_pred = clf.predict(X_test)
+        print("Classification Report:\n", classification_report(y_test, y_pred))
+        print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred))
+
+def eval_2(_df):
+    X_train, y_train, X_val, y_val, X_test, y_test, feature_names = split_scale_data(_df)
+    # Список классификаторов для перебора
+    classifiers = {
+        'LGBMClassifier':LGBMClassifier(),  # Ok
+        'CatBoostClassifier':CatBoostClassifier(silent=True),  # Ok
+        'LinearDiscriminantAnalysis':LinearDiscriminantAnalysis(),  # Ok
+        'ExtraTreesClassifier':ExtraTreesClassifier(),  # Ok
+        'LogisticRegression':LogisticRegression(max_iter=1000),  # Ok
+        'DecisionTreeClassifier':DecisionTreeClassifier(),  # Ok
+        'AdaBoostClassifier':AdaBoostClassifier(),  # Ok
+        'RandomForest': RandomForestClassifier(),
+        'GradientBoosting': GradientBoostingClassifier(),
+        'SVC': SVC(kernel='linear'),  # Используем линейное ядро для SVC
+        'XGBClassifier':XGBClassifier(use_label_encoder=False, eval_metric='logloss'), #No
+        'GaussianNB':GaussianNB(), #No
+        'QuadraticDiscriminantAnalysis':QuadraticDiscriminantAnalysis(), #No
+        'BaggingClassifier':BaggingClassifier(), #No
+    }
+
+
+    # Словарь для хранения выбранных признаков и их оценок
+    selected_features = {}
+    # Перебор классификаторов
+    for name, model in classifiers.items():
+        # Создание экземпляра RFECV
+        selector = RFECV(model, step=1, cv=5)
+        # Обучение модели
+        selector.fit(X_train, y_train)
+        # Получение выбранных признаков
+        X_selected = selector.transform(X_train)
+        # Сохранение результатов
+        selected_features[name] = {
+            'n_features': selector.n_features_,
+            'support': selector.support_,
+            'ranking': selector.ranking_,
+            'X_selected': X_selected
+        }
+        print(f"{name}: {selected_features[name]['n_features']} выбранных признаков")
+        results_df = pd.DataFrame(selected_features)
+        results_df.to_csv('selected_features.csv', index=False)
+        print(f"Results saved to {'selected_features.csv'}")
+
+
+    # Теперь вы можете использовать X_selected для дальнейшего обучения или оценки моделей
+
 
 def evaluate_classifiers_with_rfe(classifiers,_df, n_features_to_select=10):
     X_train, y_train, X_val, y_val, X_test, y_test, feature_names = split_scale_data(_df)
@@ -116,19 +239,20 @@ def evaluate_classifiers_with_rfe(classifiers,_df, n_features_to_select=10):
 
 def start_r(df):
     classifiers = [
-        LogisticRegression(max_iter=1000),
+        LGBMClassifier(),#Ok
+        CatBoostClassifier(silent=True),#Ok
+        LinearDiscriminantAnalysis(),#Ok
+        ExtraTreesClassifier(),#Ok
+        LogisticRegression(max_iter=1000),#Ok
+        DecisionTreeClassifier(),#Ok
+        AdaBoostClassifier(),#Ok
+        RandomForestClassifier(),
         SVC(),
-        DecisionTreeClassifier(),
-        AdaBoostClassifier(),
-        XGBClassifier(use_label_encoder=False, eval_metric='logloss'),
-        LGBMClassifier(),
-        CatBoostClassifier(silent=True),
-        GaussianNB(),
-        LinearDiscriminantAnalysis(),
-        QuadraticDiscriminantAnalysis(),
-        BaggingClassifier(),
-        ExtraTreesClassifier()
+        #XGBClassifier(use_label_encoder=False, eval_metric='logloss'), #No
+        #GaussianNB(), #No
+        #QuadraticDiscriminantAnalysis(), #No
+        #BaggingClassifier(), #No
     ]
 
-    # Предполагается, что X_train, y_train, X_val, y_val уже определены
-    evaluate_classifiers_with_rfe(classifiers,df, n_features_to_select=10)
+    _df = df.copy()
+    evaluate_classifiers_with_rfe(classifiers,df, n_features_to_select=15)

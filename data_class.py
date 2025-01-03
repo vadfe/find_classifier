@@ -36,6 +36,15 @@ class mydata:
     res['p_1h_high']  = res['p_high'].rolling(window=(12)).max()
     res['p_1h_low']  = res['p_low'].rolling(window=(12)).min()
     res['p_1h_vol'] = res['volume'].rolling(window=(12)).sum()/res['ma_vol']
+
+    res['apo'] = ta.apo(res['p_close'])
+    res['bias'] = ta.bias(res['p_close'])
+    res['bop'] = ta.bop(res['p_open'], res['p_high'], res['p_low'], res['p_close'])
+    brar = ta.brar(res['p_open'], res['p_high'], res['p_low'], res['p_close'])
+    res['ar'] = brar['AR_26']
+    res['br'] = brar['BR_26']
+    res['cg'] = ta.cg(res['p_close'])
+
     res['pOBV'] = ta.obv(res['p_close'], res['p_vol'])
     res['pOBV_30m'] = ta.obv(res['p_30m_close'], res['p_30m_vol'])
     res['pOBV_1h'] = ta.obv(res['p_1h_close'], res['p_1h_vol'])
